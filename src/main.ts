@@ -206,6 +206,14 @@ const isDevMode = !!process.execPath.match(/[\\/]electron/);
 
 const validProjectExt = [".json", ".gbsproj"];
 
+const heapFlag = process.argv.find((a) =>
+  a.startsWith("--max-old-space-size="),
+);
+if (heapFlag) {
+  const size = parseInt(heapFlag.split("=")[1], 10);
+  app.commandLine.appendSwitch("js-flags", `--max-old-space-size=${size}`);
+}
+
 if (isDevMode) {
   app.whenReady().then(() => {
     installExtension([REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS])
