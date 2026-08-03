@@ -1,0 +1,13 @@
+name: Clone Upstream Releases
+on:
+  workflow_dispatch: # Allows you to run this manually with a single click
+
+jobs:
+  clone-releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone Releases
+        uses: andrewthetechie/clone-github-releases@v1.1.0 # Verify latest version on GitHub Marketplace
+        with:
+          src_repo: "chrismaltby/gb-studio"
+          token: ${{ secrets.GITHUB_TOKEN }}
