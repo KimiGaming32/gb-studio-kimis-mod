@@ -81,6 +81,8 @@ export const getVariableId = (
     }
   } else if (isVariableTemp(variable)) {
     return variable;
+  } else if (variable.match(/[a-z0-9-]{36}/)) {
+    return variable;
   }
   return String(parseInt(variable || "0"));
 };
@@ -318,7 +320,7 @@ export const valueFunctionToScriptOperator = (
 };
 
 export const funToScriptOperator = (
-  fun: FunctionSymbol,
+  fun: Exclude<FunctionSymbol, "len">,
 ): ScriptBuilderRPNOperation => {
   switch (fun) {
     case "min":

@@ -1,6 +1,8 @@
 import { SCREEN_HEIGHT, SCREEN_WIDTH } from "consts";
 import {
+  compileGameGlobalsInclude,
   compileGameGlobalsHeader,
+  globalVariableOffsets,
   compileScrollBounds,
   parallaxStep,
   toASMCollisionGroup,
@@ -57,6 +59,62 @@ describe("compileGameGlobalsHeader", () => {
     expect(output).toInclude("STATE_DEFAULT 0");
     expect(output).toInclude("STATE_EXPLODE 1");
     expect(output).toInclude("STATE_OPEN 2");
+  });
+
+  test("should reserve contiguous slots for array variables", () => {
+    const variables = {
+      array: {
+        id: "array",
+        name: "Array",
+        symbol: "VAR_ARRAY",
+        isLocal: false,
+        entityType: "scene" as const,
+        entityId: "",
+        sceneId: "",
+        length: 3,
+      },
+      number: {
+        id: "number",
+        name: "Number",
+        symbol: "VAR_NUMBER",
+        isLocal: false,
+        entityType: "scene" as const,
+        entityId: "",
+        sceneId: "",
+        length: 1,
+      },
+      secondArray: {
+        id: "secondArray",
+        name: "Second Array",
+        symbol: "VAR_SECOND_ARRAY",
+        isLocal: false,
+        entityType: "scene" as const,
+        entityId: "",
+        sceneId: "",
+        length: 2,
+      },
+    };
+
+    const include = compileGameGlobalsInclude(variables, [], {}, [], []);
+    const header = compileGameGlobalsHeader(variables, [], {}, [], []);
+
+    expect(include).toInclude("VAR_ARRAY = 0");
+    expect(include).toInclude("VAR_NUMBER = 3");
+    expect(include).toInclude("VAR_SECOND_ARRAY = 4");
+    expect(include).toInclude("MAX_GLOBAL_VARS = 6");
+    expect(header).toInclude("VAR_ARRAY 0");
+    expect(header).toInclude("VAR_NUMBER 3");
+    expect(header).toInclude("VAR_SECOND_ARRAY 4");
+    expect(header).toInclude("MAX_GLOBAL_VARS 6");
+    expect(
+      globalVariableOffsets(variables).variables.map(
+        ({ symbol, offset, length }) => ({ symbol, offset, length }),
+      ),
+    ).toEqual([
+      { symbol: "VAR_ARRAY", offset: 0, length: 3 },
+      { symbol: "VAR_NUMBER", offset: 3, length: 1 },
+      { symbol: "VAR_SECOND_ARRAY", offset: 4, length: 2 },
+    ]);
   });
 });
 

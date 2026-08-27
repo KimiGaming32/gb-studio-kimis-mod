@@ -27,6 +27,7 @@ export const functionSymbols = [
   "min",
   "max",
   "abs",
+  "len",
   "atan2",
   "isqrt",
   "rnd",
@@ -38,6 +39,7 @@ export const functionArgsLen: Record<FunctionSymbol, number> = {
   min: 2,
   max: 2,
   abs: 1,
+  len: 1,
   atan2: 2,
   isqrt: 1,
   rnd: 1,
@@ -69,6 +71,7 @@ interface TokenVal {
 interface TokenVar {
   type: "VAR";
   symbol: string;
+  index?: Token[];
 }
 
 interface TokenConst {
@@ -96,8 +99,14 @@ export type Token =
   | TokenOperator
   | TokenSeperator;
 
+interface RPNTokenVar {
+  type: "VAR";
+  symbol: string;
+  index?: RPNToken[];
+}
+
 export type RPNToken =
-  TokenVal | TokenVar | TokenConst | TokenFunction | TokenOperator;
+  TokenVal | RPNTokenVar | TokenConst | TokenFunction | TokenOperator;
 
 const rpnTokenTypes = ["VAL", "VAR", "FUN", "OP"] as const;
 

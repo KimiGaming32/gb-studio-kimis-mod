@@ -2,7 +2,14 @@ import DirectionPicker from "components/forms/DirectionPicker";
 import { PropertySelect } from "components/forms/PropertySelect";
 import { VariableSelect } from "components/forms/VariableSelect";
 import {
+  IndexedVariableInputGroup,
+  VariableIndexBracket,
+  VariableIndexInputGroup,
+  VariableInputGroup,
+} from "components/forms/VariableIndexInput";
+import {
   isInfix,
+  isArrayOperation,
   isUnaryOperation,
   isValueAtom,
   isValueOperation,
@@ -11,6 +18,7 @@ import {
   ValueAtomType,
   ValueOperatorType,
   ValueUnaryOperatorType,
+  ValueArrayOperationType,
 } from "shared/lib/scriptValue/types";
 import React, { JSX, useCallback, useContext, useMemo, useRef } from "react";
 import styled, { css } from "styled-components";
@@ -64,7 +72,11 @@ import { ClipboardTypeScriptValue } from "store/features/clipboard/clipboardType
 import { useAppDispatch, useAppSelector } from "store/hooks";
 import clipboardActions from "store/features/clipboard/clipboardActions";
 import { copy, paste } from "store/features/clipboard/clipboardHelpers";
-import { constantSelectors } from "store/features/entities/entitiesSelectors";
+import {
+  constantSelectors,
+  customEventSelectors,
+  variableSelectors,
+} from "store/features/entities/entitiesSelectors";
 import { ConstantSelect } from "./ConstantSelect";
 import { SingleValue } from "react-select";
 import EngineFieldSelect from "components/forms/EngineFieldSelect";
@@ -72,7 +84,7 @@ import { assertUnreachable } from "shared/lib/helpers/assert";
 import { ActorDirection } from "shared/lib/resources/types";
 
 type ValueFunctionMenuItem = {
-  value: ValueOperatorType | ValueUnaryOperatorType;
+  value: ValueOperatorType | ValueUnaryOperatorType | ValueArrayOperationType;
   label: React.ReactNode;
   symbol?: string;
 };
@@ -84,7 +96,10 @@ const TextIcon = styled.div`
 `;
 
 const iconLookup: Record<
-  ValueAtomType | ValueOperatorType | ValueUnaryOperatorType | "rnd",
+  | ValueAtomType
+  | ValueOperatorType
+  | ValueUnaryOperatorType
+  | ValueArrayOperationType,
   JSX.Element
 > = {
   // Value
@@ -117,6 +132,7 @@ const iconLookup: Record<
   min: <TextIcon>min</TextIcon>,
   max: <TextIcon>max</TextIcon>,
   abs: <TextIcon>abs</TextIcon>,
+  len: <TextIcon>len</TextIcon>,
   atan2: <TextIcon>atan2</TextIcon>,
   isqrt: <SquareRootIcon />,
   rnd: <TextIcon>rnd</TextIcon>,
@@ -131,7 +147,10 @@ const iconLookup: Record<
 };
 
 const l10nKeyLookup: Record<
-  ValueAtomType | ValueOperatorType | ValueUnaryOperatorType | "rnd",
+  | ValueAtomType
+  | ValueOperatorType
+  | ValueUnaryOperatorType
+  | ValueArrayOperationType,
   L10NKey
 > = {
   // Value
@@ -164,6 +183,7 @@ const l10nKeyLookup: Record<
   min: "FIELD_MIN",
   max: "FIELD_MAX",
   abs: "FIELD_ABSOLUTE_VALUE",
+  len: "FIELD_ARRAY_LENGTH",
   atan2: "FIELD_ATAN2",
   isqrt: "FIELD_SQUARE_ROOT",
   rnd: "FIELD_RANDOM",
@@ -263,6 +283,10 @@ const functionMenuItems: ValueFunctionMenuItem[] = [
   { value: "isqrt", label: <L10NText l10nKey="FIELD_SQUARE_ROOT" /> },
 ];
 
+const arrayMenuItems: ValueFunctionMenuItem[] = [
+  { value: "len", label: <L10NText l10nKey="FIELD_ARRAY_LENGTH" /> },
+];
+
 const booleanOperatorMenuItems: ValueFunctionMenuItem[] = [
   {
     value: "and",
@@ -283,6 +307,7 @@ const booleanOperatorMenuItems: ValueFunctionMenuItem[] = [
 
 interface ValueWrapperProps {
   $isOver: boolean;
+  $isIndexedVariable?: boolean;
 }
 
 const OperatorWrapper = styled.div`
@@ -311,7 +336,7 @@ const ValueWrapper = styled.div<ValueWrapperProps>`
   display: flex;
   flex-grow: 1;
   align-items: center;
-  min-width: 98px;
+  min-width: ${(props) => (props.$isIndexedVariable ? "min-content" : "98px")};
   flex-basis: 130px;
   ${(props) => (props.$isOver ? dropTargetStyle : "")}
 `;
@@ -419,6 +444,12 @@ const ValueSelect = ({
   const editorType = useAppSelector((state) => state.editor.type);
   const defaultConstant = useAppSelector(
     (state) => constantSelectors.selectAll(state)[0],
+  );
+  const variablesLookup = useAppSelector((state) =>
+    variableSelectors.selectEntities(state),
+  );
+  const customEvent = useAppSelector((state) =>
+    customEventSelectors.selectById(state, entityId),
   );
   const isValueFn = isValueOperation(value);
   const dragRef = useRef<HTMLDivElement>(null);
@@ -528,8 +559,28 @@ const ValueSelect = ({
   );
 
   const setValueFunction = useCallback(
-    (type: ValueOperatorType | ValueUnaryOperatorType) => {
-      if (isValueUnaryOperatorType(type)) {
+    (
+      type:
+        ValueOperatorType | ValueUnaryOperatorType | ValueArrayOperationType,
+    ) => {
+      if (type === "len") {
+        const defaultArrayId =
+          Object.values(customEvent?.variables ?? {}).find(
+            (variable) => variable.passByReference === "array",
+          )?.id ??
+          Object.values(variablesLookup).find(
+            (variable) => variable?.type === "array",
+          )?.id ??
+          "";
+        onChange({
+          type,
+          value: {
+            type: "variable",
+            value: defaultArrayId,
+          },
+        });
+        focus();
+      } else if (isValueUnaryOperatorType(type)) {
         onChange({
           type,
           value,
@@ -556,7 +607,7 @@ const ValueSelect = ({
         }
       }
     },
-    [focus, focusSecondChild, onChange, value],
+    [customEvent, focus, focusSecondChild, onChange, value, variablesLookup],
   );
 
   const onKeyDown = useCallback(
@@ -666,6 +717,17 @@ const ValueSelect = ({
         </MenuItem>
       )),
       <MenuDivider key="div2" />,
+      ...arrayMenuItems.map((menuItem) => (
+        <MenuItem
+          key={menuItem.value}
+          onClick={() => setValueFunction(menuItem.value)}
+          icon={value.type === menuItem.value ? <CheckIcon /> : <BlankIcon />}
+        >
+          {menuItem.label}
+          {menuItem.symbol && <MenuAccelerator accelerator={menuItem.symbol} />}
+        </MenuItem>
+      )),
+      <MenuDivider key="div3" />,
       <MenuItem
         key="rnd"
         onClick={() => setValueFunction("rnd")}
@@ -916,7 +978,10 @@ const ValueSelect = ({
       ) : null;
     }
 
-    const isOperation = isUnaryOperation(value) || isValueOperation(value);
+    const isOperation =
+      isUnaryOperation(value) ||
+      isValueOperation(value) ||
+      isArrayOperation(value);
 
     return (
       <DropWrapper ref={dragRef}>
@@ -931,7 +996,7 @@ const ValueSelect = ({
         >
           {menu}
           {isOperation ? <MenuDivider /> : null}
-          {isUnaryOperation(value) ? (
+          {isUnaryOperation(value) || isArrayOperation(value) ? (
             <MenuItem
               onClick={() => {
                 onChange(value.value);
@@ -975,9 +1040,9 @@ const ValueSelect = ({
                     ? value.value
                     : "",
                 )}
-                min={innerValue ? undefined : min}
-                max={innerValue ? undefined : max}
-                step={innerValue ? undefined : step}
+                min={min}
+                max={max}
+                step={step}
                 placeholder={innerValue ? "0" : String(placeholder ?? "0")}
                 onChange={(e) => {
                   onChange({
@@ -1143,23 +1208,70 @@ const ValueSelect = ({
         </ValueWrapper>
       );
     } else if (value.type === "variable") {
+      const selectedVariable = variablesLookup[value.value];
+      const selectedCustomEventVariable = customEvent?.variables[value.value];
+      const isIndexableVariable =
+        selectedVariable?.type === "array" ||
+        selectedCustomEventVariable?.passByReference === "array";
       return (
-        <ValueWrapper ref={previewRef} $isOver={isOver}>
-          <InputGroup ref={dropRef}>
-            <InputGroupPrepend>{dropdownButton}</InputGroupPrepend>
-            <VariableSelect
-              name={name}
-              entityId={entityId}
-              value={value.value}
-              allowRename
-              onChange={(newValue) => {
-                onChange({
-                  type: "variable",
-                  value: newValue,
-                });
-              }}
-            />
-          </InputGroup>
+        <ValueWrapper
+          ref={previewRef}
+          $isOver={isOver}
+          $isIndexedVariable={isIndexableVariable}
+        >
+          <IndexedVariableInputGroup ref={dropRef}>
+            <VariableInputGroup>
+              <InputGroupPrepend>{dropdownButton}</InputGroupPrepend>
+              <VariableSelect
+                name={name}
+                entityId={entityId}
+                value={value.value}
+                allowRename
+                onChange={(newValue) => {
+                  const newVariable = variablesLookup[newValue];
+                  const isIndexable =
+                    newVariable?.type === "array" ||
+                    customEvent?.variables[newValue]?.passByReference ===
+                      "array";
+                  onChange({
+                    type: "variable",
+                    value: newValue,
+                    ...(isIndexable
+                      ? {
+                          index: value.index ?? {
+                            type: "number" as const,
+                            value: 0,
+                          },
+                        }
+                      : {}),
+                  });
+                }}
+              />
+            </VariableInputGroup>
+            {isIndexableVariable && (
+              <VariableIndexInputGroup>
+                <VariableIndexBracket $type="open" />
+                <ValueSelect
+                  name={`${name}_index`}
+                  entityId={entityId}
+                  value={value.index}
+                  min={0}
+                  max={
+                    selectedVariable?.type === "array"
+                      ? selectedVariable.length - 1
+                      : selectedCustomEventVariable?.passByReference === "array"
+                        ? selectedCustomEventVariable.length - 1
+                        : undefined
+                  }
+                  onChange={(index) => {
+                    onChange({ ...value, index });
+                  }}
+                  innerValue
+                />
+                <VariableIndexBracket $type="close" />
+              </VariableIndexInputGroup>
+            )}
+          </IndexedVariableInputGroup>
         </ValueWrapper>
       );
     } else if (value.type === "constant") {
@@ -1265,6 +1377,30 @@ const ValueSelect = ({
             />
           </InputGroup>
         </ValueWrapper>
+      );
+    } else if (value.type === "len") {
+      return (
+        <BracketsWrapper ref={previewRef} $isOver={isOver} $isFunction>
+          <OperatorWrapper ref={dropRef}>{dropdownButton}</OperatorWrapper>
+          <BracketsWrapper>
+            <VariableSelect
+              name={`${name}_valueA`}
+              entityId={entityId}
+              value={value.value.type === "variable" ? value.value.value : ""}
+              allowedVariableTypes={["array"]}
+              onChange={(newValue) => {
+                onChange({
+                  type: "len",
+                  value: {
+                    type: "variable",
+                    value: newValue,
+                  },
+                });
+              }}
+              allowRename
+            />
+          </BracketsWrapper>
+        </BracketsWrapper>
       );
     } else if (isUnaryOperation(value)) {
       return (
@@ -1372,6 +1508,8 @@ const ValueSelect = ({
     placeholder,
     step,
     value,
+    customEvent,
+    variablesLookup,
   ]);
 
   if (innerValue) {

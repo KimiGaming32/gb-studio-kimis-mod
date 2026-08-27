@@ -321,4 +321,7 @@ export interface ScriptEventFieldSchema {
   labelVariant?: string;
   filters?: Record<string, unknown>;
   prefix?: string;
+  variableType?: "any" | "arrayElement" | "arrayReference";
+  arrayLength?: number;
+  allowCustomEventParameters?: boolean;
 }

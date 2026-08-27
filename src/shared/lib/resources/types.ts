@@ -421,11 +421,22 @@ export type Scene = Omit<
   triggers: Trigger[];
 };
 
-export const ScriptVariable = Type.Object({
+const ScriptVariableBase = {
   id: Type.String(),
   name: Type.String(),
-  passByReference: Type.Boolean(),
-});
+};
+
+export const ScriptVariable = Type.Union([
+  Type.Object({
+    ...ScriptVariableBase,
+    passByReference: Type.Boolean(),
+  }),
+  Type.Object({
+    ...ScriptVariableBase,
+    passByReference: Type.Literal("array"),
+    length: Type.Integer({ minimum: 1 }),
+  }),
+]);
 
 export type ScriptVariable = Static<typeof ScriptVariable>;
 
@@ -986,12 +997,31 @@ export type SettingsResource = Static<typeof SettingsResource>;
 
 export type Settings = ExtractResource<SettingsResource>;
 
-export const Variable = Type.Object({
+export const VariableType = Type.Union([
+  Type.Literal("number"),
+  Type.Literal("array"),
+]);
+
+export type VariableType = Static<typeof VariableType>;
+
+const VariableBase = {
   id: Type.String(),
   name: Type.String(),
   symbol: Type.String(),
   flags: Type.Optional(Type.Record(Type.String(), Type.String())),
-});
+};
+
+export const Variable = Type.Union([
+  Type.Object({
+    ...VariableBase,
+    type: Type.Literal("number"),
+  }),
+  Type.Object({
+    ...VariableBase,
+    type: Type.Literal("array"),
+    length: Type.Integer({ minimum: 1 }),
+  }),
+]);
 
 export type Variable = Static<typeof Variable>;
 

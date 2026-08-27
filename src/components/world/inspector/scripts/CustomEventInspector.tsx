@@ -36,6 +36,9 @@ import { ScriptUsesList } from "components/world/inspector/scripts/ScriptUsesLis
 import { SplitPaneHeader } from "ui/splitpane/SplitPaneHeader";
 import { customEventName } from "shared/lib/entities/entitiesHelpers";
 import styled from "styled-components";
+import type { ScriptVariable } from "shared/lib/resources/types";
+import { NumberInput } from "ui/form/NumberInput";
+import { VariableIndexBracket } from "components/forms/VariableIndexInput";
 
 interface CustomEventInspectorProps {
   id: string;
@@ -53,6 +56,10 @@ const UsesCollapsedWrapper = styled.div`
   left: 0;
   right: 17px;
   border-top: 1px solid ${(props) => props.theme.colors.input.border};
+`;
+
+const ArrayLengthDivider = styled.div<{ $closing?: boolean }>`
+  border-right: 1px solid ${(props) => props.theme.colors.input.border};
 `;
 
 export const CustomEventInspector = ({ id }: CustomEventInspectorProps) => {
@@ -133,26 +140,43 @@ export const CustomEventInspector = ({ id }: CustomEventInspectorProps) => {
   );
 
   const onEditVariablePassByReference = useCallback(
-    (key: string, passByReference: boolean) => {
+    (key: string, passByReference: ScriptVariable["passByReference"]) => {
       if (!customEvent) {
         return;
       }
-      const variable = customEvent.variables[key];
-      if (!variable) {
-        return;
-      }
-
-      onChangeCustomEventProp(
-        "variables",
-        Object.assign({}, customEvent.variables, {
-          [key]: {
-            ...variable,
-            passByReference,
-          },
+      dispatch(
+        entitiesActions.editCustomEventVariablePassByReference({
+          customEventId: id,
+          variableId: key,
+          passByReference,
         }),
       );
     },
-    [customEvent, onChangeCustomEventProp],
+    [customEvent, dispatch, id],
+  );
+
+  const onEditVariableLength = useCallback(
+    (key: string): React.ChangeEventHandler<HTMLInputElement> =>
+      (e) => {
+        if (!customEvent) {
+          return;
+        }
+        const variable = customEvent.variables[key];
+        if (!variable) {
+          return;
+        }
+        const parsedLength = e.currentTarget.valueAsNumber;
+        const length =
+          Number.isInteger(parsedLength) && parsedLength > 0 ? parsedLength : 1;
+        dispatch(
+          entitiesActions.editCustomEventVariableLength({
+            customEventId: id,
+            variableId: key,
+            length,
+          }),
+        );
+      },
+    [customEvent, dispatch, id],
   );
 
   const onEditActorName = useCallback(
@@ -350,40 +374,60 @@ export const CustomEventInspector = ({ id }: CustomEventInspectorProps) => {
                             if (!variable) {
                               return null;
                             }
+                            const isArrayReference =
+                              variable.passByReference === "array";
+                            const isReference =
+                              variable.passByReference === true;
+                            const passTypeLabel = isArrayReference
+                              ? l10n("FIELD_PASS_BY_ARRAY_REFERENCE_SHORT")
+                              : isReference
+                                ? l10n("FIELD_PASS_BY_REFERENCE_SHORT")
+                                : l10n("FIELD_PASS_BY_VALUE_SHORT");
+                            const passTypeDescription = isArrayReference
+                              ? l10n(
+                                  "FIELD_PASS_BY_ARRAY_REFERENCE_DESCRIPTION",
+                                )
+                              : isReference
+                                ? l10n("FIELD_PASS_BY_REFERENCE_DESCRIPTION")
+                                : l10n("FIELD_PASS_BY_VALUE_DESCRIPTION");
                             return (
                               <FormRow key={variable.id}>
                                 <InputGroup>
                                   <Input
                                     id={`variable[${i}]`}
                                     value={variable.name}
-                                    placeholder="Variable Name"
+                                    placeholder={l10n("FIELD_VARIABLE_NAME")}
                                     onChange={onEditVariableName(variable.id)}
                                   />
+                                  {variable.passByReference === "array" && (
+                                    <>
+                                      <VariableIndexBracket $type="open" />
+                                      <NumberInput
+                                        id={`variable[${i}].length`}
+                                        value={variable.length}
+                                        placeholder={l10n("FIELD_LENGTH")}
+                                        onChange={onEditVariableLength(
+                                          variable.id,
+                                        )}
+                                        min={1}
+                                      />
+                                      <VariableIndexBracket $type="close" />
+                                      <ArrayLengthDivider />
+                                    </>
+                                  )}
                                   <InputGroupAppend>
                                     <DropdownButton
                                       label={
                                         <span
                                           style={{
-                                            minWidth: 40,
+                                            minWidth: 50,
                                             textAlign: "left",
                                           }}
                                         >
-                                          {variable.passByReference
-                                            ? l10n(
-                                                "FIELD_PASS_BY_REFERENCE_SHORT",
-                                              )
-                                            : l10n("FIELD_PASS_BY_VALUE_SHORT")}
+                                          {passTypeLabel}
                                         </span>
                                       }
-                                      title={
-                                        variable.passByReference
-                                          ? l10n(
-                                              "FIELD_PASS_BY_REFERENCE_DESCRIPTION",
-                                            )
-                                          : l10n(
-                                              "FIELD_PASS_BY_VALUE_DESCRIPTION",
-                                            )
-                                      }
+                                      title={passTypeDescription}
                                     >
                                       <MenuItem
                                         onClick={() =>
@@ -393,7 +437,7 @@ export const CustomEventInspector = ({ id }: CustomEventInspectorProps) => {
                                           )
                                         }
                                         icon={
-                                          !variable.passByReference ? (
+                                          variable.passByReference === false ? (
                                             <CheckIcon />
                                           ) : (
                                             <BlankIcon />
@@ -410,7 +454,7 @@ export const CustomEventInspector = ({ id }: CustomEventInspectorProps) => {
                                           )
                                         }
                                         icon={
-                                          variable.passByReference ? (
+                                          isReference ? (
                                             <CheckIcon />
                                           ) : (
                                             <BlankIcon />
@@ -418,6 +462,23 @@ export const CustomEventInspector = ({ id }: CustomEventInspectorProps) => {
                                         }
                                       >
                                         {l10n("FIELD_PASS_BY_REFERENCE")}
+                                      </MenuItem>
+                                      <MenuItem
+                                        onClick={() =>
+                                          onEditVariablePassByReference(
+                                            variable.id,
+                                            "array",
+                                          )
+                                        }
+                                        icon={
+                                          isArrayReference ? (
+                                            <CheckIcon />
+                                          ) : (
+                                            <BlankIcon />
+                                          )
+                                        }
+                                      >
+                                        {l10n("FIELD_PASS_BY_ARRAY_REFERENCE")}
                                       </MenuItem>
                                     </DropdownButton>
                                   </InputGroupAppend>
